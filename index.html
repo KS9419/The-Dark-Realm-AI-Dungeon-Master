@@ -861,17 +861,12 @@ const FB_CONFIG={
   messagingSenderId:"567765507385",
   appId:"1:567765507385:web:50b11c62de821739a49ce8"
 };
-// Firebase will be initialized on first use
+// Firebase — uses dnd-rooms/ path (separate from TTT which uses ttt-rooms/)
 let db=null;
 function initFirebase(){
   if(db)return;
-  try{
-    firebase.initializeApp(FB_CONFIG);
-    db=firebase.database();
-  }catch(e){
-    // Already initialized
-    db=firebase.app().database();
-  }
+  try{firebase.initializeApp(FB_CONFIG,'dnd');}catch(e){}
+  db=firebase.app('dnd').database();
 }
 let mpHost=false,myPid='',mpParty={},mpRoomCode='',mpListeners=[];
 
@@ -1500,7 +1495,7 @@ function mpCreate(){
   mpRoomCode=genCode();
   mpParty={host:{name,cls:char?.cls||'Adventurer',icon:char?.clsIcon||'⚔️',hp:char?.hp,maxHp:char?.maxHp}};
 
-  const roomRef=db.ref('rooms/'+mpRoomCode);
+  const roomRef=db.ref('dnd-rooms/'+mpRoomCode);
   roomRef.set({
     host:name,
     status:'waiting',
@@ -1514,7 +1509,7 @@ function mpCreate(){
     toast('Room ready! Share code: '+mpRoomCode,3000);
 
     // Listen for players joining
-    const partyRef=db.ref('rooms/'+mpRoomCode+'/party');
+    const partyRef=db.ref('dnd-rooms/'+mpRoomCode+'/party');
     const partyListener=partyRef.on('value',snap=>{
       const data=snap.val();
       if(!data)return;
@@ -1528,7 +1523,7 @@ function mpCreate(){
     mpListeners.push(()=>partyRef.off('value',partyListener));
 
     // Listen for messages from players
-    const msgRef=db.ref('rooms/'+mpRoomCode+'/messages');
+    const msgRef=db.ref('dnd-rooms/'+mpRoomCode+'/messages');
     const msgListener=msgRef.on('child_added',snap=>{
       const d=snap.val();
       if(!d||d.from==='host')return;
@@ -1550,14 +1545,14 @@ function mpJoin(){
   myPid=name+'_'+Date.now();
   mpRoomCode=code;
 
-  const roomRef=db.ref('rooms/'+code);
+  const roomRef=db.ref('dnd-rooms/'+code);
   roomRef.once('value').then(snap=>{
     const room=snap.val();
     if(!room){toast('Room not found! Check the code.');return;}
     if(room.status==='started'){toast('Game already in progress!');return;}
 
     // Add myself to party
-    db.ref('rooms/'+code+'/party/'+myPid).set({
+    db.ref('dnd-rooms/'+code+'/party/'+myPid).set({
       name,cls:char?.cls||'Adventurer',icon:char?.clsIcon||'⚔️',
       hp:char?.hp,maxHp:char?.maxHp
     });
@@ -1568,7 +1563,7 @@ function mpJoin(){
     toast('Joined the party!',2000);
 
     // Listen for party updates
-    const partyRef=db.ref('rooms/'+code+'/party');
+    const partyRef=db.ref('dnd-rooms/'+code+'/party');
     const partyListener=partyRef.on('value',snap=>{
       const data=snap.val();if(!data)return;
       mpParty=data;renderPartyList();
@@ -1576,7 +1571,7 @@ function mpJoin(){
     mpListeners.push(()=>partyRef.off('value',partyListener));
 
     // Listen for game start & DM responses
-    const stateRef=db.ref('rooms/'+code+'/gameState');
+    const stateRef=db.ref('dnd-rooms/'+code+'/gameState');
     const stateListener=stateRef.on('value',snap=>{
       const state=snap.val();if(!state)return;
       if(state.type==='start'){
@@ -1600,18 +1595,18 @@ function mpBroadcast(data){
   if(!mpRoomCode)return;
   if(mpHost){
     // Host writes to gameState — all guests react
-    db.ref('rooms/'+mpRoomCode+'/gameState').set({...data,ts:Date.now()});
+    db.ref('dnd-rooms/'+mpRoomCode+'/gameState').set({...data,ts:Date.now()});
   } else {
     // Guest writes to messages — host reacts
-    db.ref('rooms/'+mpRoomCode+'/messages').push({...data,from:myPid,ts:Date.now()});
+    db.ref('dnd-rooms/'+mpRoomCode+'/messages').push({...data,from:myPid,ts:Date.now()});
   }
 }
 
 function mpStartGame(){
   if(!mpHost)return;
   if(!char){toast('Create your character first!');ss('s-create');return;}
-  db.ref('rooms/'+mpRoomCode).update({status:'started'});
-  db.ref('rooms/'+mpRoomCode+'/gameState').set({type:'start',zone:currentZone,ts:Date.now()});
+  db.ref('dnd-rooms/'+mpRoomCode).update({status:'started'});
+  db.ref('dnd-rooms/'+mpRoomCode+'/gameState').set({type:'start',zone:currentZone,ts:Date.now()});
   ss('s-game');updateTopBar();updatePartyIndicator();
   document.getElementById('story-feed').innerHTML=`<div class="typing-indicator show" id="typing-ind"><span style="font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:1.5px">The Dungeon Master stirs</span><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
   const partyNames=Object.values(mpParty).map(p=>p.name).join(', ');
@@ -1620,8 +1615,8 @@ function mpStartGame(){
 
 function mpLeave(){
   mpDetachListeners();
-  if(mpRoomCode&&mpHost) db.ref('rooms/'+mpRoomCode).remove();
-  else if(mpRoomCode&&myPid) db.ref('rooms/'+mpRoomCode+'/party/'+myPid).remove();
+  if(mpRoomCode&&mpHost) db.ref('dnd-rooms/'+mpRoomCode).remove();
+  else if(mpRoomCode&&myPid) db.ref('dnd-rooms/'+mpRoomCode+'/party/'+myPid).remove();
   mpRoomCode='';mpParty={};myPid='';mpHost=false;
   ss('s-title');
 }
